@@ -1,17 +1,19 @@
-use std::fs::{self, File};
-use std::io;
-use std::io::Read;
+use std::fs;
+use std::fs::File;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use zip::write::FileOptions;
-use zip::CompressionMethod;
-use zip::ZipWriter;
-use zip::ZipArchive;
-use std::time::Instant;
-use rayon::prelude::*;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use image::{ImageFormat};
+use std::time::Instant;
+
+use futures::future;
+use image::ImageFormat;
 use memmap::MmapOptions;
+use rayon::prelude::*;
+use tokio::fs as async_fs;
+use tokio::task;
+use zip::write::FileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 
@@ -22,7 +24,7 @@ fn image_to_binary_file(image_path: &Path, output_folder: &Path) -> io::Result<P
     let binary_file_name = image_path.file_name().unwrap().to_str().unwrap().to_owned() + ".bin";
     let binary_file_path = output_folder.join(binary_file_name);
 
-    fs::write(&binary_file_path, &mmap[..])?;
+    std::fs::write(&binary_file_path, &mmap[..])?;
 
     let count = FILE_COUNT.fetch_add(1, Ordering::SeqCst);
     println!("{}: Image file: {:?} converted to Binary file: {:?}", count, image_path.file_name().unwrap(), binary_file_path.file_name().unwrap());
@@ -30,13 +32,15 @@ fn image_to_binary_file(image_path: &Path, output_folder: &Path) -> io::Result<P
     Ok(binary_file_path)
 }
 
-fn decompress_and_convert_to_images(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
-    fs::create_dir_all(output_folder)?;
+async fn decompress_and_convert_to_images(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
+    println!("Starting decompression and conversion process...");
+    let overall_start = Instant::now();
+    async_fs::create_dir_all(output_folder).await?;
 
     let file = File::open(zip_path)?;
-    let archive = Mutex::new(ZipArchive::new(file)?);
+    let mut archive = ZipArchive::new(file)?;
 
-    let archive_len = archive.lock().unwrap().len();
+    let archive_len = archive.len();
     println!("Archive contains {} entries", archive_len);
 
     if archive_len == 0 {
@@ -44,74 +48,47 @@ fn decompress_and_convert_to_images(zip_path: &Path, output_folder: &Path) -> io
         return Ok(());
     }
 
-    (0..archive_len).into_par_iter().for_each(|i| {
-        let mut archive = archive.lock().unwrap();
-        let file = match archive.by_index(i) {
-            Ok(file) => file,
-            Err(e) => {
-                println!("Failed to read file index {} from archive: {:?}", i, e);
-                return;
-            }
-        };
+    let mut tasks = vec![];
 
+    for i in 0..archive_len {
+        let start = Instant::now();
+        let mut file = archive.by_index(i).unwrap();
         let outpath = match file.enclosed_name() {
             Some(path) => output_folder.join(path),
             None => {
                 println!("Skipping file at index {}: invalid file name", i);
-                return;
+                continue;
             }
         };
 
-        println!("Decompressing: {:?}", file.name());
+        println!("Processing file at index {}: {:?}", i, outpath.file_name().unwrap());
 
-        if file.name().ends_with('/') {
-            if let Err(e) = fs::create_dir_all(&outpath) {
-                println!("Failed to create directory {:?}: {:?}", outpath, e);
-            }
-        } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    if let Err(e) = fs::create_dir_all(&p) {
-                        println!("Failed to create directory for file {:?}: {:?}", p, e);
-                        return;
-                    }
-                }
-            }
-            let mut outfile = match File::create(&outpath) {
-                Ok(file) => file,
-                Err(e) => {
-                    println!("Failed to create output file {:?}: {:?}", outpath, e);
-                    return;
-                }
-            };
-            let file_size = file.size();
-            if let Err(e) = io::copy(&mut file.take(file_size), &mut outfile) {
-                println!("Failed to decompress file {:?}: {:?}", outpath, e);
-            } else {
-                println!("Decompressed: {:?}", outpath);
-                // Attempt to convert the binary file to an image
-                match determine_image_format(&outpath) {
-                    Ok(format) => {
-                        if let Err(e) = convert_binary_to_image(&outpath, &format) {
-                            println!("Failed to convert to image: {:?}, error: {:?}", outpath, e);
-                        } else {
-                            println!("Converted to image: {:?}", outpath);
-                        }
-                    },
-                    Err(e) => println!("Failed to determine image format for {:?}: {:?}", outpath, e),
-                }
-            }
-        }
-    });
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
 
+        let output_folder = output_folder.to_path_buf();
+
+        tasks.push(task::spawn(async move {
+            async_fs::write(&outpath, &buffer).await.unwrap();
+
+            if let Ok(format) = determine_image_format(&outpath) {
+                convert_binary_to_image(&outpath, &format, &output_folder).unwrap();
+            }
+
+            let duration = start.elapsed();
+            println!("File processed in {} ms", duration.as_millis());
+        }));
+    }
+
+    future::join_all(tasks).await;
+    let overall_duration = overall_start.elapsed();
+    println!("Decompression and conversion process completed in {} ms", overall_duration.as_millis());
     Ok(())
 }
-
 
 fn determine_image_format(binary_path: &Path) -> io::Result<ImageFormat> {
     let mut extension = binary_path.extension().and_then(std::ffi::OsStr::to_str);
 
-    // Check if the extension is .bin, and if so, strip it and re-evaluate the extension
     if extension == Some("bin") {
         if let Some(stem) = binary_path.file_stem().and_then(|s| s.to_str()) {
             if let Some(pos) = stem.rfind('.') {
@@ -135,7 +112,7 @@ fn determine_image_format(binary_path: &Path) -> io::Result<ImageFormat> {
     }
 }
 
-fn convert_binary_to_image(binary_path: &Path, format: &ImageFormat) -> io::Result<()> {
+fn convert_binary_to_image(binary_path: &Path, format: &ImageFormat, decompression_folder: &Path) -> io::Result<()> {
     let file = File::open(binary_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
     let img = image::load_from_memory(&mmap[..])
@@ -147,7 +124,17 @@ fn convert_binary_to_image(binary_path: &Path, format: &ImageFormat) -> io::Resu
         _ => "png",
     });
 
-    img.save(output_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    img.save(&output_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+    // Define the new folder path for binary files
+    let binary_files_folder = decompression_folder.join("binary_files");
+    fs::create_dir_all(&binary_files_folder)?;
+
+    // Move the binary file to the new folder
+    let new_binary_path = binary_files_folder.join(binary_path.file_name().unwrap());
+    fs::rename(binary_path, &new_binary_path)?;
+
+    println!("Moved binary file to: {:?}", new_binary_path);
 
     Ok(())
 }
@@ -178,9 +165,9 @@ fn add_binary_files_to_zip(
     compression_level: i64,
 ) -> io::Result<()> {
     let output_folder = folder_path.join("binary_output");
-    fs::create_dir_all(&output_folder)?;
+    std::fs::create_dir_all(&output_folder)?;
 
-    let entries: Vec<_> = fs::read_dir(folder_path)?.filter_map(|e| e.ok()).collect();
+    let entries: Vec<_> = std::fs::read_dir(folder_path)?.filter_map(|e| e.ok()).collect();
 
     entries.par_iter().for_each(|entry| {
         let path = entry.path();
@@ -223,7 +210,7 @@ fn add_binary_files_to_zip(
                             return;
                         }
                     };
-                    if io::copy(&mut file, &mut *zip_guard).is_err() {
+                    if std::io::copy(&mut file, &mut *zip_guard).is_err() {
                         println!("Error adding binary file to zip: {}", file_name);
                     }
                 },
@@ -237,7 +224,8 @@ fn add_binary_files_to_zip(
     Ok(())
 }
 
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 5 {
         println!("Usage: <input_folder> <output_zip> <compression_algorithm> <compression_level>");
@@ -274,7 +262,6 @@ fn main() -> io::Result<()> {
     println!("Zip file created successfully at {}", output_zip_path);
     println!("Time taken: {} ms", duration.as_millis());
 
-
-    decompress_and_convert_to_images(zip_path, output_folder)?;
+    decompress_and_convert_to_images(zip_path, output_folder).await?;
     Ok(())
 }
