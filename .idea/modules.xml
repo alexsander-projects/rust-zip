@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/rust-test-compress-decompress.iml" filepath="$PROJECT_DIR$/.idea/rust-test-compress-decompress.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/compressimagesvideosrust.iml" filepath="$PROJECT_DIR$/.idea/compressimagesvideosrust.iml" />
     </modules>
   </component>
 </project>

@@ -1,91 +1,95 @@
-use clap::{Parser, Subcommand};
 use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter};
-use std::path::Path;
-use tar::{Builder, Archive};
-use zstd::stream::write::Encoder;
-use std::io::Read;
+use std::io;
+use std::path::{Path};
+use zip::write::FileOptions;
+use zip::CompressionMethod;
+use zip::ZipWriter;
+use std::env;
+use std::time::Instant;
 
-#[derive(Parser)]
-#[command(name = "targz_compressor")]
-#[command(about = "A CLI tool to compress and decompress files using tar.gz with zstd compression", long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
+fn get_compression_method(algorithm: &str, level: i64) -> io::Result<(CompressionMethod, Option<i64>)> {
+    match algorithm {
+        "Zstd" => {
+            let valid_level = if level >= -7 && level <= 22 { Some(level) } else { Some(3) };
+            Ok((CompressionMethod::Zstd, valid_level))
+        },
+        "Bzip2" => {
+            let valid_level = if level >= 0 && level <= 9 { Some(level) } else { Some(6) };
+            Ok((CompressionMethod::Bzip2, valid_level))
+        },
+        "Deflated" => {
+            let valid_level = if level >= 0 && level <= 9 { Some(level) }
+            else { Some(6) };
+            Ok((CompressionMethod::Deflated, valid_level))
+        },
+        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "Unsupported compression algorithm, supported algorithms are: Zstd, Bzip2, Deflated")),
+    }
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    Compress {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-        #[arg(short, long, default_value_t = 3)]
-        level: i32,
-    },
-    Decompress {
-        #[arg(short, long)]
-        input: String,
-        #[arg(short, long)]
-        output: String,
-    },
+fn add_folder_contents_to_zip(
+    zip: &mut ZipWriter<File>,
+    folder_path: &Path,
+    base_folder_name: &str,
+    compression_algorithm: &str,
+    compression_level: i64,
+) -> io::Result<()> {
+    for entry in fs::read_dir(folder_path)? {
+        let (compression_method, valid_level) = get_compression_method(compression_algorithm, compression_level)?;
+
+        let entry = entry?;
+        let path = entry.path();
+        let relative_path = match path.strip_prefix(base_folder_name) {
+            Ok(rp) => rp,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to strip prefix: {}", e),
+                ));
+            }
+        };
+        if path.is_dir() {
+            add_folder_contents_to_zip(zip, &path, base_folder_name, compression_algorithm, compression_level)?;
+        } else {
+            let options: FileOptions<()> = FileOptions::default()
+                .compression_method(compression_method).compression_level(Option::from(valid_level));
+            let file_name = relative_path.to_str().unwrap();
+            zip.start_file(file_name, options)?;
+            let mut file = File::open(&path)?;
+            io::copy(&mut file, zip)?;
+        }
+    }
+    Ok(())
 }
 
 fn main() -> io::Result<()> {
-    let cli = Cli::parse();
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 5 {
+        println!("Usage: <input_folder> <output_zip> <compression_algorithm> <compression_level>");
+        return Ok(());
+    }
+    let folder_path = Path::new(&args[1]);
+    let output_zip_path = &args[2];
+    let compression_algorithm = &args[3];
+    let compression_level = args[4].parse::<i64>().unwrap();
 
-    match &cli.command {
-        Commands::Compress { input, output, level } => {
-            compress(&input, &output, *level)?;
-        }
-        Commands::Decompress { input, output } => {
-            decompress(&input, &output)?;
-        }
+    if !folder_path.exists() || !folder_path.is_dir() {
+        println!("Error: Folder does not exist or is not a directory.");
+        return Ok(());
     }
 
-    Ok(())
-}
+    let file = File::create(output_zip_path)?;
+    let mut zip = ZipWriter::new(file);
 
-fn compress(input_path: &str, output_path: &str, level: i32) -> io::Result<()> {
-    // Create a temporary tar file
-    let tar_path = format!("{}.tar", output_path);
-    let tar_file = File::create(&tar_path)?;
-    let buf_writer = BufWriter::new(tar_file);
+    let start = Instant::now();
 
-    // Create the tarball
-    let mut tar = Builder::new(buf_writer);
-    tar.append_dir_all(".", input_path)?;
-    tar.finish()?;
+    println!("Creating zip file at {}", output_zip_path);
+    println!("Using compression algorithm: {}, level: {}", compression_algorithm, compression_level);
 
-    // Compress the tarball with Zstandard
-    let tar_file = File::open(&tar_path)?;
-    let tar_reader = BufReader::new(tar_file);
-    let gz_file = File::create(output_path)?;
-    let gz_writer = BufWriter::new(gz_file);
+    add_folder_contents_to_zip(&mut zip, folder_path, folder_path.to_str().unwrap(), compression_algorithm, compression_level)?;
 
-    println!("Using compression level: {}", level);
-
-    let mut encoder = Encoder::new(gz_writer, level)?;
-    encoder.multithread(num_cpus::get() as u32)?;
-
-    io::copy(&mut tar_reader.take(u64::MAX), &mut encoder)?;
-    encoder.finish()?;
-
-    // Clean up the temporary tar file
-    fs::remove_file(tar_path)?;
-
-    Ok(())
-}
-
-fn decompress(input_path: &str, output_path: &str) -> io::Result<()> {
-    let gz_file = File::open(input_path)?;
-    let buf_reader = BufReader::new(gz_file);
-    let decoder = zstd::stream::Decoder::new(buf_reader)?;
-    let tar_reader = BufReader::new(decoder);
-
-    let mut archive = Archive::new(tar_reader);
-    archive.unpack(output_path)?;
+    zip.finish()?;
+    println!("Zip file created successfully at {}", output_zip_path);
+    println!("Time taken: {} ms", start.elapsed().as_millis());
 
     Ok(())
 }
