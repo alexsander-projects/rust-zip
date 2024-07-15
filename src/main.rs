@@ -2,6 +2,7 @@ mod compression;
 mod decompression;
 mod image_processing;
 mod utils;
+mod text_to_binary;
 
 use std::fs::File;
 use std::io::{self};
@@ -9,8 +10,10 @@ use std::path::{Path};
 use std::sync::Mutex;
 use std::time::Instant;
 use zip::{ZipWriter};
-use crate::compression::add_binary_files_to_zip;
-use crate::decompression::decompress_and_convert_to_images;
+
+use crate::compression::add_files_to_zip;
+use crate::compression::FileType;
+use crate::decompression::decompress_and_convert_to_files;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -34,16 +37,18 @@ async fn main() -> io::Result<()> {
             let file = File::create(output_zip_path)?;
             let zip = ZipWriter::new(file);
             let zip_mutex = Mutex::new(zip);
+            let file_type = FileType::Other;
 
             let start = Instant::now();
 
             println!("Creating zip file at {}", output_zip_path);
             println!("Using compression algorithm: {}, level: {}", compression_algorithm, compression_level);
-
-            add_binary_files_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level)?;
+            add_files_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level, file_type)?;
 
             let zip = zip_mutex.into_inner().unwrap();
             zip.finish()?;
+
+            println!("File {} added to zip", folder_path.display());
 
             let duration = start.elapsed();
             println!("Zip file created successfully at {}", output_zip_path);
@@ -57,7 +62,17 @@ async fn main() -> io::Result<()> {
             let zip_path = Path::new(&args[2]);
             let output_folder = Path::new(&args[3]);
 
-            decompress_and_convert_to_images(zip_path, output_folder).await?;
+            decompress_and_convert_to_files(zip_path, output_folder).await?;
+
+            let paths = std::fs::read_dir(output_folder)?;
+            for path in paths {
+                let path = path?.path();
+                if path.extension().and_then(std::ffi::OsStr::to_str) != Some("bin"){
+                    continue;
+                }
+                println!("Decompressed file: {:?}", path.file_name().unwrap());
+                println!("Files decompressed successfully to: {:?}", output_folder);
+            }
         },
         _ => println!("Invalid mode. Please specify 'compression' or 'decompression'."),
     }

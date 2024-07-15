@@ -6,9 +6,12 @@ use tokio::fs as async_fs;
 use tokio::task;
 use futures::future;
 use zip::ZipArchive;
-use crate::image_processing::{convert_binary_to_image, determine_image_format};
 
-pub async fn decompress_and_convert_to_images(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
+use crate::image_processing::{convert_binary_to_image, determine_image_format};
+use crate::text_to_binary::text_to_binary_file;
+use crate::text_to_binary::binary_to_text_file;
+
+pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
     println!("Starting decompression and conversion process...");
     let overall_start = Instant::now();
     async_fs::create_dir_all(output_folder).await?;
@@ -47,8 +50,26 @@ pub async fn decompress_and_convert_to_images(zip_path: &Path, output_folder: &P
         tasks.push(task::spawn(async move {
             async_fs::write(&outpath, &buffer).await.unwrap();
 
-            if let Ok(format) = determine_image_format(&outpath) {
-                convert_binary_to_image(&outpath, &format, &output_folder).await.unwrap();
+            let extension = outpath.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+
+            match extension {
+                "bin" => {
+                    if let Ok(format) = determine_image_format(&outpath) {
+                        convert_binary_to_image(&outpath, &format, &output_folder).await.unwrap();
+                    }
+                }
+                "txt" => {
+                    binary_to_text_file(&outpath, &output_folder).await.unwrap();
+                }
+                // "mp4" | "avi" | "mov" => {
+                //     convert_binary_to_video(&outpath, &output_folder).await.unwrap();
+                // }
+                // "mp3" | "wav" => {
+                //     convert_binary_to_audio(&outpath, &output_folder).await.unwrap();
+                // }
+                _ => {
+                    println!("Unsupported file format: {}", extension);
+                }
             }
 
             let duration = start.elapsed();
