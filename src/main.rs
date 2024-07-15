@@ -65,11 +65,7 @@ async fn main() -> io::Result<()> {
 
             decompress_and_convert_to_files(zip_path, output_folder).await?;
 
-            let paths = std::fs::read_dir(output_folder)?;
-            for path in paths {
-                let path = path?.path();
-                println!("Decompressed file: {:?}", path.file_name().unwrap());
-            }
+            println!("Decompressed file: {:?}", zip_path.file_name().unwrap());
         },
         _ => println!("Invalid mode. Please specify 'compression' or 'decompression'."),
     }

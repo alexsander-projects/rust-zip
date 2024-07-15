@@ -74,7 +74,8 @@ pub async fn convert_binary_to_image(binary_path: &Path, decompression_folder: &
 
     img.save(&output_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    println!("Converted binary file to image: {:?}", output_path);
+    let count = FILE_COUNT.fetch_add(1, Ordering::SeqCst);
+    println!("{}, Converted binary file to image: {:?}",count, output_path);
 
     Ok(())
 }

@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
-use serde_json::Value;
 use memmap::MmapOptions;
 use std::sync::atomic::{AtomicUsize, Ordering};
 // Implement the function text_to_binary_file that reads a text file and writes its contents to a binary file.
