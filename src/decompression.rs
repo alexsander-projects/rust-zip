@@ -11,7 +11,6 @@ use std::ffi::OsStr;
 
 use crate::image_processing::{convert_binary_to_image, determine_image_format};
 use crate::text_to_binary::convert_binary_to_text;
-use crate::text_to_binary::text_to_binary_file;
 
 #[derive(Debug)]
 pub enum FileType {
@@ -65,7 +64,7 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
 
             match extension {
                 "bin" => {
-                    if let Ok(format) = determine_image_format(&outpath) {
+                    if let Ok(_format) = determine_image_format(&outpath) {
                         convert_binary_to_image(&outpath, &output_folder).await.unwrap();
                         tokio::fs::remove_file(&outpath).await.unwrap();
                         println!("Removed binary file: {:?}", outpath.file_name().unwrap());
@@ -75,7 +74,7 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
                         match content_type {
                             FileType::Text => {
                                 convert_binary_to_text(&outpath, &output_folder).await.unwrap();
-                                tokio::fs::remove_file(&outpath).await;
+                                let _=tokio::fs::remove_file(&outpath).await;
                                 println!("Removed binary file: {:?}", outpath.file_name().unwrap());
                             }
                             _ => println!("Unsupported binary file type: {:?}", content_type),

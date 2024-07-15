@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use image::ImageFormat;
 use memmap::MmapOptions;
-use tokio::fs;
-use std::sync::Arc;
 
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 

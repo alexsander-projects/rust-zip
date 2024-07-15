@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use zip::{write::FileOptions, ZipWriter};
 
 use crate::image_processing::image_to_binary_file;
+use crate::text_to_binary::text_to_binary_file;
 use crate::utils::get_compression_method;
 
 pub enum FileType {
@@ -97,13 +98,13 @@ pub fn file_type_matches(path: &Path, file_type: &FileType) -> bool {
     }
 }
 
-pub fn convert_to_target_format(path: &Path, output_folder: &Path, file_type: &FileType) -> io::Result<PathBuf> {
+pub fn convert_to_target_format(path: &Path, output_folder: &Path, _file_type: &FileType) -> io::Result<PathBuf> {
     let extension = path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
     let target_file_type = get_file_type(extension);
 
     match target_file_type {
         FileType::Image => image_to_binary_file(path, output_folder),
-        FileType::Text => image_to_binary_file(path, output_folder),
+        FileType::Text => text_to_binary_file(path, output_folder),
         FileType::Video | FileType::Audio | FileType::Other => {
             let output_path = output_folder.join(path.file_name().unwrap());
             std::fs::copy(path, &output_path)?;

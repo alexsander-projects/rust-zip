@@ -1,27 +1,25 @@
-use tokio::fs::{self, File};
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 use serde_json::Value;
 use memmap::MmapOptions;
+use std::sync::atomic::{AtomicUsize, Ordering};
 // Implement the function text_to_binary_file that reads a text file and writes its contents to a binary file.
 
-pub async fn text_to_binary_file(text_path: &Path, output_folder: &Path) -> io::Result<PathBuf> {
-    let mut text_file = File::open(text_path).await?;
+static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 
-    let mut contents = Vec::new();
-    text_file.read_to_end(&mut contents).await?;
+pub fn text_to_binary_file(text_path: &Path, output_folder: &Path) -> io::Result<PathBuf> {
+    let file = File::open(text_path)?;
+    let mmap = unsafe { MmapOptions::new().map(&file)? };
 
-    let extension = text_path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
-
-    let binary_file_name = if extension == "json" {
-        text_path.file_stem().unwrap().to_str().unwrap().to_owned() + ".bin"
-    } else {
-        text_path.file_name().unwrap().to_str().unwrap().to_owned() + ".bin"
-    };
+    let binary_file_name = text_path.file_name().unwrap().to_str().unwrap().to_owned() + ".bin";
     let binary_file_path = output_folder.join(binary_file_name);
 
-    fs::write(&binary_file_path, &contents).await?;
-    println!("File: {:?} converted to Binary file: {:?}", text_path.file_name().unwrap(), binary_file_path.file_name().unwrap());
+    std::fs::write(&binary_file_path, &mmap[..])?;
+
+    let count = FILE_COUNT.fetch_add(1, Ordering::SeqCst);
+    println!("{}: Text file: {:?} converted to Binary file: {:?}", count, text_path.file_name().unwrap(), binary_file_path.file_name().unwrap());
+
     Ok(binary_file_path)
 }
 
@@ -48,32 +46,34 @@ pub async fn determine_text_format(binary_path: &Path) -> io::Result<String> {
 
 // Implement the function binary_to_text_file that reads a binary file and writes its contents to a text file.
 pub async fn convert_binary_to_text(binary_path: &Path, decompression_folder: &Path) -> io::Result<()> {
-    let async_file = fs::File::open(binary_path).await?;
-    let std_file = async_file.into_std().await;
-    let mmap = unsafe { MmapOptions::new().map(&std_file)? };
-    let text_content = std::str::from_utf8(&mmap)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let file = File::open(binary_path)?;
+    let mmap = unsafe { MmapOptions::new().map(&file)? };
+    let txt = String::from_utf8_lossy(&mmap[..]);
+
+    // Determine the correct image format and extension
+    let format = determine_text_format(binary_path).await?;
+    let extension = match format.as_str() {
+        //expect String
+        "json" => "json".to_string(),
+        "txt" => "txt".to_string(),
+        _=> "txt".to_string(),
+    };
 
     // Extract the file stem, removing the .bin extension if present
     let mut output_file_name = binary_path.file_stem().unwrap().to_str().unwrap().to_owned();
-    if output_file_name.ends_with(".txt") {
-        output_file_name.truncate(output_file_name.len() - 4); // Remove .txt if present
+    if output_file_name.ends_with(&extension) {
+        // If the stem already ends with the correct extension, do not append again
+        output_file_name.truncate(output_file_name.len() - extension.len());
     }
-    output_file_name.push_str(".txt"); // Append .txt extension
-    let output_path = decompression_folder.join(output_file_name);
+    let output_file_name = format!("{}.{}", output_file_name, extension);
 
-    fs::write(&output_path, text_content).await?;
+    let output_path = decompression_folder.join(&output_file_name);
 
-    // Define the new folder path for binary files
-    let binary_files_folder = decompression_folder.join("binary_files");
-    fs::create_dir_all(&binary_files_folder).await?;
+    //change this to another function supporting txt
+    //img.save(&output_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    std::fs::write(&output_path, &txt[..])?;
 
-    // Move the binary file to the new folder
-    let new_binary_path = binary_files_folder.join(binary_path.file_name().unwrap());
-    fs::rename(binary_path, &new_binary_path).await?;
-
-    println!("Moved binary file to: {:?}", new_binary_path);
-    println!("Converted binary file to text: {:?}", output_path);
+    println!("Converted binary file to txt: {:?}", output_path);
 
     Ok(())
 }
