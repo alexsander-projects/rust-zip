@@ -25,25 +25,43 @@ pub async fn text_to_binary_file(text_path: &Path, output_folder: &Path) -> io::
     Ok(binary_file_path)
 }
 
+pub async fn determine_text_format(binary_path: &Path) -> io::Result<String> {
+    let mut extension = binary_path.extension().and_then(std::ffi::OsStr::to_str);
+
+    if extension == Some("bin") {
+        if let Some(stem) = binary_path.file_stem().and_then(|s| s.to_str()) {
+            if let Some(pos) = stem.rfind('.') {
+                extension = Some(&stem[(pos + 1)..]);
+            }
+        }
+    }
+
+    match extension {
+        Some("json") | Some("Json") => Ok("json".to_string()),
+        Some("txt") | Some("Txt") => Ok("txt".to_string()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unsupported or unknown text format",
+        )),
+    }
+}
+
 // Implement the function binary_to_text_file that reads a binary file and writes its contents to a text file.
 pub async fn convert_binary_to_text(binary_path: &Path, decompression_folder: &Path) -> io::Result<()> {
-    // Open the file asynchronously
     let async_file = fs::File::open(binary_path).await?;
-
-    // Convert the async file to a standard file
     let std_file = async_file.into_std().await;
-
-    // Memory map the file
     let mmap = unsafe { MmapOptions::new().map(&std_file)? };
-
-    // Convert the binary content to text
     let text_content = std::str::from_utf8(&mmap)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
-    // Define the output path with .txt extension
-    let output_path = binary_path.with_extension("txt");
+    // Extract the file stem, removing the .bin extension if present
+    let mut output_file_name = binary_path.file_stem().unwrap().to_str().unwrap().to_owned();
+    if output_file_name.ends_with(".txt") {
+        output_file_name.truncate(output_file_name.len() - 4); // Remove .txt if present
+    }
+    output_file_name.push_str(".txt"); // Append .txt extension
+    let output_path = decompression_folder.join(output_file_name);
 
-    // Write the text content to the output path asynchronously
     fs::write(&output_path, text_content).await?;
 
     // Define the new folder path for binary files
@@ -55,6 +73,7 @@ pub async fn convert_binary_to_text(binary_path: &Path, decompression_folder: &P
     fs::rename(binary_path, &new_binary_path).await?;
 
     println!("Moved binary file to: {:?}", new_binary_path);
+    println!("Converted binary file to text: {:?}", output_path);
 
     Ok(())
 }

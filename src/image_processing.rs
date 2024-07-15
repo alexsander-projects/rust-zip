@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use image::ImageFormat;
 use memmap::MmapOptions;
 use tokio::fs;
+use std::sync::Arc;
 
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 
@@ -49,29 +50,33 @@ pub(crate) fn determine_image_format(binary_path: &Path) -> io::Result<ImageForm
     }
 }
 
-pub async fn convert_binary_to_image(binary_path: &Path, format: &ImageFormat, decompression_folder: &Path) -> io::Result<()> {
+pub async fn convert_binary_to_image(binary_path: &Path, decompression_folder: &Path) -> io::Result<()> {
     let file = File::open(binary_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
-    let img = image::load_from_memory(&mmap[..])
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let img = image::load_from_memory(&mmap[..]).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
-    let output_path = binary_path.with_extension(match format {
+    // Determine the correct image format and extension
+    let format = determine_image_format(binary_path)?;
+    let extension = match format {
         ImageFormat::Png => "png",
         ImageFormat::Jpeg => "jpg",
+        // Add more formats as needed
         _ => "png",
-    });
+    };
+
+    // Extract the file stem, removing the .bin extension if present
+    let mut output_file_name = binary_path.file_stem().unwrap().to_str().unwrap().to_owned();
+    if output_file_name.ends_with(extension) {
+        // If the stem already ends with the correct extension, do not append again
+        output_file_name.truncate(output_file_name.len() - extension.len());
+    }
+    let output_file_name = format!("{}.{}", output_file_name, extension);
+
+    let output_path = decompression_folder.join(&output_file_name);
 
     img.save(&output_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    // Define the new folder path for binary files
-    let binary_files_folder = decompression_folder.join("binary_files");
-    fs::create_dir_all(&binary_files_folder).await?;
-
-    // Move the binary file to the new folder
-    let new_binary_path = binary_files_folder.join(binary_path.file_name().unwrap());
-    fs::rename(binary_path, &new_binary_path).await?;
-
-    println!("Moved binary file to: {:?}", new_binary_path);
+    println!("Converted binary file to image: {:?}", output_path);
 
     Ok(())
 }

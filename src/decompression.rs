@@ -6,6 +6,7 @@ use tokio::fs as async_fs;
 use tokio::task;
 use futures::future;
 use zip::ZipArchive;
+use std::ffi::OsStr;
 
 use crate::image_processing::{convert_binary_to_image, determine_image_format};
 use crate::text_to_binary::convert_binary_to_text;
@@ -19,7 +20,6 @@ pub enum FileType {
     Text,
     Other,
 }
-
 
 pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
     println!("Starting decompression and conversion process...");
@@ -65,13 +65,17 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
             match extension {
                 "bin" => {
                     if let Ok(format) = determine_image_format(&outpath) {
-                        convert_binary_to_image(&outpath, &format, &output_folder).await.unwrap();
+                        convert_binary_to_image(&outpath, &output_folder).await.unwrap();
+                        tokio::fs::remove_file(&outpath).await.unwrap();
+                        println!("Removed binary file: {:?}", outpath.file_name().unwrap());
                     } else {
                         // Handle non-image binary files appropriately
                         let content_type = determine_file_type(&outpath);
                         match content_type {
                             FileType::Text => {
                                 convert_binary_to_text(&outpath, &output_folder).await.unwrap();
+                                tokio::fs::remove_file(&outpath).await.unwrap();
+                                println!("Removed binary file: {:?}", outpath.file_name().unwrap());
                             }
                             _ => println!("Unsupported binary file type: {:?}", content_type),
                         }
@@ -96,10 +100,31 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
     Ok(())
 }
 
-pub fn determine_file_type(path: &Path) -> FileType {
-    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
-    match extension {
-        "txt" => FileType::Text,
-        _ => FileType::Other,
+fn determine_file_type(path: &Path) -> FileType {
+    let extension = path.extension().and_then(OsStr::to_str);
+    let mut file_type = FileType::Other;
+
+    if extension == Some("bin") {
+        if let Some(stem) = path.file_stem().and_then(OsStr::to_str) {
+            if stem.ends_with(".txt") {
+                file_type = FileType::Text;
+            } else if stem.ends_with(".mp4") || stem.ends_with(".avi") || stem.ends_with(".mov") {
+                file_type = FileType::Video;
+            } else if stem.ends_with(".mp3") || stem.ends_with(".wav") {
+                file_type = FileType::Audio;
+            } else if stem.ends_with(".png") || stem.ends_with(".jpg") || stem.ends_with(".jpeg") {
+                file_type = FileType::Image;
+            }
+        }
+    } else {
+        match extension {
+            Some("txt") | Some("json") => file_type = FileType::Text,
+            Some("mp4") | Some("avi") | Some("mov") => file_type = FileType::Video,
+            Some("mp3") | Some("wav") => file_type = FileType::Audio,
+            Some("png") | Some("jpg") | Some("jpeg") => file_type = FileType::Image,
+            _ => file_type = FileType::Other,
+        }
     }
+
+    file_type
 }
