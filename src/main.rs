@@ -43,6 +43,7 @@ async fn main() -> io::Result<()> {
 
             println!("Creating zip file at {}", output_zip_path);
             println!("Using compression algorithm: {}, level: {}", compression_algorithm, compression_level);
+
             add_files_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level, file_type)?;
 
             let zip = zip_mutex.into_inner().unwrap();
@@ -67,11 +68,7 @@ async fn main() -> io::Result<()> {
             let paths = std::fs::read_dir(output_folder)?;
             for path in paths {
                 let path = path?.path();
-                if path.extension().and_then(std::ffi::OsStr::to_str) != Some("bin"){
-                    continue;
-                }
                 println!("Decompressed file: {:?}", path.file_name().unwrap());
-                println!("Files decompressed successfully to: {:?}", output_folder);
             }
         },
         _ => println!("Invalid mode. Please specify 'compression' or 'decompression'."),

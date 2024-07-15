@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::{Path};
+use std::path::Path;
 use std::time::Instant;
 use tokio::fs as async_fs;
 use tokio::task;
@@ -8,8 +8,18 @@ use futures::future;
 use zip::ZipArchive;
 
 use crate::image_processing::{convert_binary_to_image, determine_image_format};
+use crate::text_to_binary::convert_binary_to_text;
 use crate::text_to_binary::text_to_binary_file;
-use crate::text_to_binary::binary_to_text_file;
+
+#[derive(Debug)]
+pub enum FileType {
+    Image,
+    Video,
+    Audio,
+    Text,
+    Other,
+}
+
 
 pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
     println!("Starting decompression and conversion process...");
@@ -56,17 +66,20 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
                 "bin" => {
                     if let Ok(format) = determine_image_format(&outpath) {
                         convert_binary_to_image(&outpath, &format, &output_folder).await.unwrap();
+                    } else {
+                        // Handle non-image binary files appropriately
+                        let content_type = determine_file_type(&outpath);
+                        match content_type {
+                            FileType::Text => {
+                                convert_binary_to_text(&outpath, &output_folder).await.unwrap();
+                            }
+                            _ => println!("Unsupported binary file type: {:?}", content_type),
+                        }
                     }
                 }
                 "txt" => {
-                    binary_to_text_file(&outpath, &output_folder).await.unwrap();
+                    convert_binary_to_text(&outpath, &output_folder).await.unwrap();
                 }
-                // "mp4" | "avi" | "mov" => {
-                //     convert_binary_to_video(&outpath, &output_folder).await.unwrap();
-                // }
-                // "mp3" | "wav" => {
-                //     convert_binary_to_audio(&outpath, &output_folder).await.unwrap();
-                // }
                 _ => {
                     println!("Unsupported file format: {}", extension);
                 }
@@ -81,4 +94,12 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
     let overall_duration = overall_start.elapsed();
     println!("Decompression and conversion process completed in {} ms", overall_duration.as_millis());
     Ok(())
+}
+
+pub fn determine_file_type(path: &Path) -> FileType {
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+    match extension {
+        "txt" => FileType::Text,
+        _ => FileType::Other,
+    }
 }
