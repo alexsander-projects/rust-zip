@@ -3,6 +3,7 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::time::Instant;
 use tokio::fs as async_fs;
+use tokio::fs::{self, remove_file, read_dir};
 use tokio::task;
 use futures::future;
 use zip::ZipArchive;
@@ -74,7 +75,7 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
                         match content_type {
                             FileType::Text => {
                                 convert_binary_to_text(&outpath, &output_folder).await.unwrap();
-                                tokio::fs::remove_file(&outpath).await.unwrap();
+                                tokio::fs::remove_file(&outpath).await;
                                 println!("Removed binary file: {:?}", outpath.file_name().unwrap());
                             }
                             _ => println!("Unsupported binary file type: {:?}", content_type),
@@ -97,6 +98,23 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
     future::join_all(tasks).await;
     let overall_duration = overall_start.elapsed();
     println!("Decompression and conversion process completed in {} ms", overall_duration.as_millis());
+    delete_remaining_bin_files(output_folder).await?;
+    println!("Removed remaining binary files");
+    Ok(())
+}
+
+async fn delete_remaining_bin_files(output_folder:&Path) -> io::Result<()> {
+    let binary_files_folder = output_folder.join("binary_files");
+    if binary_files_folder.exists(){
+        let mut entries = read_dir(binary_files_folder.clone()).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.is_file() {
+                remove_file(path).await?;
+            }
+        }
+        fs::remove_dir(binary_files_folder).await?;
+    }
     Ok(())
 }
 
