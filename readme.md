@@ -31,7 +31,7 @@ taking advantage of multicore processors.
 
 ### Zip:
 
-According to the official documentation, that can be found ![here](https://docs.rs/zip/2.1.3/zip/index.html):
+According to the official documentation, that can be found [here](https://docs.rs/zip/2.1.3/zip/index.html):
 
 A library for reading and writing ZIP archives.
 ZIP is a format designed for cross-platform file “archiving”.
