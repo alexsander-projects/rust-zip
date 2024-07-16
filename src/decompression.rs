@@ -8,6 +8,9 @@ use tokio::task;
 use futures::future;
 use zip::ZipArchive;
 use std::ffi::OsStr;
+use std::path::PathBuf;
+use tokio::time::{sleep, Duration};
+use std::error::Error;
 
 use crate::image_processing::{convert_binary_to_image, determine_image_format};
 use crate::text_to_binary::convert_binary_to_text;
@@ -41,7 +44,12 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
 
     for i in 0..archive_len {
         let start = Instant::now();
-        let mut file = archive.by_index(i).unwrap();
+        let file_result = archive.by_index(i);
+        if file_result.is_err() {
+            eprintln!("Error accessing file at index {}: {:?}", i, file_result.err().unwrap());
+            continue;
+        }
+        let mut file = file_result.unwrap();
         let outpath = match file.enclosed_name() {
             Some(path) => output_folder.join(path),
             None => {
@@ -53,40 +61,31 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
         println!("Processing file at index {}: {:?}", i, outpath.file_name().unwrap());
 
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
+        if let Err(e) = file.read_to_end(&mut buffer) {
+            eprintln!("Error reading file at index {}: {:?}", i, e);
+            continue;
+        }
 
         let output_folder = output_folder.to_path_buf();
 
         tasks.push(task::spawn(async move {
-            async_fs::write(&outpath, &buffer).await.unwrap();
+            if let Err(e) = async_fs::write(&outpath, &buffer).await {
+                eprintln!("Error writing file {:?}: {}", outpath, e);
+                return;
+            }
 
             let extension = outpath.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
 
             match extension {
                 "bin" => {
-                    if let Ok(_format) = determine_image_format(&outpath) {
-                        convert_binary_to_image(&outpath, &output_folder).await.unwrap();
-                        tokio::fs::remove_file(&outpath).await.unwrap();
-                        println!("Removed binary file: {:?}", outpath.file_name().unwrap());
-                    } else {
-                        // Handle non-image binary files appropriately
-                        let content_type = determine_file_type(&outpath);
-                        match content_type {
-                            FileType::Text => {
-                                convert_binary_to_text(&outpath, &output_folder).await.unwrap();
-                                let _=tokio::fs::remove_file(&outpath).await;
-                                println!("Removed binary file: {:?}", outpath.file_name().unwrap());
-                            }
-                            _ => println!("Unsupported binary file type: {:?}", content_type),
-                        }
+                    // Handle binary files
+                }
+                "txt" | "json" => {
+                    if let Err(e) = convert_and_cleanup_json_file(&outpath, &output_folder).await {
+                        eprintln!("Error converting/cleaning up file {:?}: {}", outpath, e);
                     }
                 }
-                "txt" => {
-                    convert_binary_to_text(&outpath, &output_folder).await.unwrap();
-                }
-                _ => {
-                    println!("Unsupported file format: {}", extension);
-                }
+                _ => println!("Unsupported file extension: {:?}", extension),
             }
 
             let duration = start.elapsed();
@@ -115,6 +114,38 @@ async fn delete_remaining_bin_files(output_folder:&Path) -> io::Result<()> {
         fs::remove_dir(binary_files_folder).await?;
     }
     Ok(())
+}
+
+async fn convert_and_cleanup_json_file(file_path: &Path, output_folder: &PathBuf) -> Result<(), Box<dyn Error>> {
+    let conversion_result = convert_binary_to_text(file_path, output_folder).await;
+    if let Err(e) = conversion_result {
+        eprintln!("Error converting file {:?}: {}", file_path, e);
+        // Implement retry logic for conversion if necessary, similar to file removal
+    }
+
+    let mut attempts = 0;
+    let max_attempts = 5;
+    let mut delay = 100; // Starting delay in milliseconds
+    while attempts < max_attempts {
+        match remove_file(file_path).await {
+            Ok(_) => {
+                println!("Successfully removed file: {:?}", file_path);
+                return Ok(());
+            },
+            Err(e) if e.kind() == io::ErrorKind::Other && e.raw_os_error() == Some(1224) => {
+                eprintln!("Error removing file {:?}: {}. Retrying after {}ms...", file_path, e, delay);
+                sleep(Duration::from_millis(delay)).await;
+                attempts += 1;
+                delay *= 2; // Exponential backoff
+            },
+            Err(e) => {
+                eprintln!("Failed to remove file {:?}: {}", file_path, e);
+                attempts = max_attempts; // Ensure exit from loop
+            }
+        }
+    }
+
+    Err(Box::new(io::Error::new(io::ErrorKind::Other, "Failed to remove file after multiple attempts")))
 }
 
 fn determine_file_type(path: &Path) -> FileType {
