@@ -13,7 +13,7 @@ If chosen, note that the decompression process will also convert the files back 
 ### To compress a file, run the following command:
 
 ```bash
-cargo run -- compression <input_folder> <output_zip> <compression_algorithm> <compression_level>
+cargo run -- compression <input_folder> <output_zip> <compression_algorithm> <compression_level> [--convert_to_binary]
 ```
 
 Where:
@@ -24,16 +24,19 @@ It can be either `zstd`, `bzip2` or `deflate`
 - `<compression_level>` is the compression level to use. Depending on the algorithm,
 it can be a number between -7 and 22 for Zstd, 0 and 9 for Bzip2, and 0 and 9 for Deflate.
 > Note: Higher compression levels can result in reduced file size but will take longer to compress.
+- `--convert_to_binary` is an optional flag that will convert the files to binary before compressing them.
 
 ### To decompress a file, run the following command:
 
 ```bash
-cargo run -- decompression <zip_path> <output_folder>
+cargo run -- decompression <zip_path> <output_folder> [--decompress_without_conversion]
 ```
 
 Where:
 - `<zip_path>` is the path to the zip file you want to decompress
 - `<output_folder>` is the path to the output folder
+- `--decompress_without_conversion` is an optional flag that will decompress
+the files without converting them back to their original format.
 
 ## Performance
 

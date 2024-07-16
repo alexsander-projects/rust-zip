@@ -3,6 +3,8 @@ mod decompression;
 mod image_processing;
 mod utils;
 mod text_to_binary;
+mod compression_wo_conversion;
+mod decompression_wo_conversion;
 
 use std::fs::File;
 use std::io::{self};
@@ -14,14 +16,18 @@ use zip::{ZipWriter};
 use crate::compression::add_files_to_zip;
 use crate::compression::FileType;
 use crate::decompression::decompress_and_convert_to_files;
+use crate::compression_wo_conversion::add_files_directly_to_zip;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    let convert_to_binary = args.iter().any(|arg| arg == "--convert_to_binary");
+    let decompress_without_conversion = args.iter().any(|arg| arg == "--decompress_without_conversion");
+
     match args.get(1).map(String::as_str) {
         Some("compression") => {
-            if args.len() != 6 {
-                println!("Usage for compression: cargo run -- compression <input_folder> <output_zip> <compression_algorithm> <compression_level>");
+            if args.len() < 6 || args.len() > 7 {
+                println!("Usage for compression: cargo run -- compression <input_folder> <output_zip> <compression_algorithm> <compression_level> [--convert_to_binary]");
                 return Ok(());
             }
             let folder_path = Path::new(&args[2]);
@@ -37,35 +43,42 @@ async fn main() -> io::Result<()> {
             let file = File::create(output_zip_path)?;
             let zip = ZipWriter::new(file);
             let zip_mutex = Mutex::new(zip);
-            let file_type = FileType::Other;
-
-            let start = Instant::now();
+            let file_type = FileType::Other; // Adjust based on your needs
 
             println!("Creating zip file at {}", output_zip_path);
             println!("Using compression algorithm: {}, level: {}", compression_algorithm, compression_level);
 
-            add_files_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level, file_type)?;
+            if convert_to_binary {
+                println!("Converting files to binary and adding to zip...");
+                add_files_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level, file_type);
+            } else {
+                println!("Adding files directly to zip...");
+                // Standard compression without binary conversion
+                add_files_directly_to_zip(&zip_mutex, folder_path, compression_algorithm, compression_level);
+            }
 
             let zip = zip_mutex.into_inner().unwrap();
             zip.finish()?;
 
-            println!("File {} added to zip", folder_path.display());
-
-            let duration = start.elapsed();
-            println!("Zip file created successfully at {}", output_zip_path);
-            println!("Time taken: {} ms", duration.as_millis());
+            println!("Compression completed successfully.");
         },
         Some("decompression") => {
-            if args.len() != 4 {
-                println!("Usage for decompression: cargo run -- decompression <zip_path> <output_folder>");
+            if args.len() < 4 || args.len() > 5 {
+                println!("Usage for decompression: cargo run -- decompression <zip_path> <output_folder> [--decompress_without_conversion]");
                 return Ok(());
             }
             let zip_path = Path::new(&args[2]);
             let output_folder = Path::new(&args[3]);
 
-            decompress_and_convert_to_files(zip_path, output_folder).await?;
-
-            println!("Decompressed file: {:?}", zip_path.file_name().unwrap());
+            if decompress_without_conversion {
+                println!("Decompressing without conversion...");
+                decompression_wo_conversion::decompress_files(zip_path, output_folder).await?;
+                println!("Decompressed file: {:?}", zip_path.file_name().unwrap());
+            } else {
+                println!("Decompressing and converting files...");
+                decompress_and_convert_to_files(zip_path, output_folder).await?;
+                println!("Decompressed and converted file: {:?}", zip_path.file_name().unwrap());
+            }
         },
         _ => println!("Invalid mode. Please specify 'compression' or 'decompression'."),
     }
