@@ -1,12 +1,14 @@
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
+use std::time::Instant;
 use tokio::fs as async_fs;
 use tokio::task;
 use futures::future;
 use zip::ZipArchive;
 
 pub async fn decompress_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
+    let start = Instant::now();
     println!("Starting decompression process...");
     async_fs::create_dir_all(output_folder).await?;
 
@@ -46,6 +48,8 @@ pub async fn decompress_files(zip_path: &Path, output_folder: &Path) -> io::Resu
         }));
     }
 
+    let duration = start.elapsed();
+    println!("Time elapsed: {:?}", duration);
     future::join_all(tasks).await;
     println!("Decompression process completed.");
     Ok(())

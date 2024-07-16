@@ -8,6 +8,8 @@ this will result in a smaller file size, which can be useful for text files.
 
 If chosen, note that the decompression process will also convert the files back to their original format.
 
+The app can convert text, json, and images to binary. It can also convert binary files back to their original format.
+
 ## Usage
 
 ### To compress a file, run the following command:
@@ -40,5 +42,7 @@ the files without converting them back to their original format.
 
 ## Performance
 
-- The compression and decompression speed where roughly 3 times faster than 7zip for the Zstd algorithm,
+- The compression and decompression speed where roughly 10 times faster than 7zip for the Zstd algorithm,
 where text files were compressed. The file size was roughly the same.
+- Roughly 10 times faster for the Zstd algorithm, where image files were compressed.
+- Roughly 3 times faster for the Zstd algorithm, where json files were compressed.

@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::path::PathBuf;
+use std::time::Instant;
 use rayon::prelude::*;
 use zip::{write::FileOptions, ZipWriter};
 
@@ -17,6 +18,7 @@ pub fn add_files_directly_to_zip(
     compression_algorithm: &str,
     compression_level: i64,
 ) -> io::Result<()> {
+    let start = Instant::now();
     let entries: Vec<_> = std::fs::read_dir(folder_path)?.filter_map(|e| e.ok()).collect();
 
     entries.par_iter().for_each(|entry| {
@@ -55,6 +57,7 @@ pub fn add_files_directly_to_zip(
             println!("Skipping non-file or directory: {:?}", path);
         }
     });
-
+    let duration = start.elapsed();
+    println!("Time elapsed: {:?}", duration);
     Ok(())
 }

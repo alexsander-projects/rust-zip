@@ -3,6 +3,7 @@ use std::io;
 use std::path::Path;
 use std::sync::Mutex;
 use std::path::PathBuf;
+use std::time::Instant;
 use rayon::prelude::*;
 use zip::{write::FileOptions, ZipWriter};
 
@@ -26,6 +27,7 @@ pub fn add_files_to_zip(
     file_type: FileType,
 ) -> io::Result<()> {
     let output_folder = folder_path.join("output");
+    let start = Instant::now();
     std::fs::create_dir_all(&output_folder)?;
 
     let entries: Vec<_> = std::fs::read_dir(folder_path)?.filter_map(|e| e.ok()).collect();
@@ -74,6 +76,8 @@ pub fn add_files_to_zip(
         }
     });
 
+    let duration = start.elapsed();
+    println!("Time elapsed: {:?}", duration);
     Ok(())
 }
 
