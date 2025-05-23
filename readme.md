@@ -63,7 +63,7 @@ Where:
 - `<compression_algorithm>` is the compression algorithm to use.
   It can be either `zstd`, `bzip2` or `deflate`
 - `<compression_level>` is the compression level to use. Depending on the algorithm,
-  it can be a number between -7 and 22 for Zstd, 0 and 9 for Bzip2, and 0 and 9 for Deflate.
+  it can be a number between -7 and 22 for Zstd, 0 and 9 for Bzip2, and 0 and 9 for Deflate. (lower numbers mean faster compression)
 > Note: Higher compression levels can result in reduced file size but will take longer to compress.
 - `--convert_to_binary` is an optional flag that will convert the files to binary before compressing them.
 
