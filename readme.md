@@ -1,14 +1,19 @@
 # Blazingly fast Rust compressor and decompressor
 
-This app is capable of compressing and decompressing files using either the Zstd, Bzip2 or deflate algorithms.
-It is written in Rust and uses the `zip` crate for the compression and decompression.
+A Rust application for compressing and decompressing files using Zstd, Bzip2, or Deflate algorithms via the `zip` crate.
+Features optional binary conversion for text, JSON, and image files to reduce size, with the ability to revert during decompression.
 
-Optionally, you can specify if you want to convert the files to binary before compressing them,
-this will result in a smaller file size, which can be useful for text files.
+## Table of Contents
 
-Note that the decompression process is capable of converting the files back to their original format.
-
-The app can convert text, json, and images to binary. It can also convert binary files back to their original format.
+- [Notes](#notes)
+  - [Tokio](#tokio)
+  - [Rayon](#rayon)
+  - [Zip](#zip)
+- [Usage](#usage)
+  - [Compressing Files](#compressing-files)
+  - [Decompressing Files](#decompressing-files)
+- [Performance](#performance)
+- [Conversion to binary performance](#conversion-to-binary-performance)
 
 ## Notes
 
@@ -38,46 +43,58 @@ ZIP is a format designed for cross-platform file “archiving”.
 That is, storing a collection of files in a single datastream to make them easier to share between computers.
 Additionally, ZIP is able to compress and encrypt files in its archives.
 
-The Struct zip::write::FileOptions provides the compression method and level to use when writing a file to a ZIP archive.
+The `zip::write::FileOptions` struct provides the compression method and level to use when writing a file to a ZIP archive.
 
-The compression method can be one of the following(with their respective compression levels):
+The compression method can be one of the following (with their respective compression levels):
 
-
-    Deflated:10 - 264 for Zopfli, 0 - 9 for other encoders. Default is 24 if Zopfli is the only encoder, or 6 otherwise.
-    Bzip2: 0 - 9. Default is 6
-    Zstd: -7 - 22, with zero being mapped to default level. Default is 3
-
-
+*   **Deflated**: Levels 0-9 (standard encoders) or 10-264 (Zopfli). Default: 6 (standard) or 24 (if Zopfli is the only encoder).
+*   **Bzip2**: Levels 0-9. Default: 6.
+*   **Zstd**: Levels -7 to 22 (0 maps to default level 3). Default: 3.
 
 ## Usage
 
-### To compress a file, run the following command:
+### Compressing Files
+
+To compress a file, run the following command:
 
 ```bash
-cargo run -- compression <input_folder> <output_zip> <compression_algorithm> <compression_level> [--convert_to_binary]
+cargo run -- compression <input_folder> <output_zip> [--compression-algorithm <algorithm>] [--compression-level <level>] [--convert_to_binary]
+```
+Or using short flags:
+```bash
+cargo run -- compression <input_folder> <output_zip> [-c <algorithm>] [-l <level>] [--convert_to_binary]
 ```
 
 Where:
 - `<input_folder>` is the path to the folder you want to compress
 - `<output_zip>` is the path to the output zip file
-- `<compression_algorithm>` is the compression algorithm to use.
-  It can be either `zstd`, `bzip2` or `deflate`
-- `<compression_level>` is the compression level to use. Depending on the algorithm,
-  it can be a number between -7 and 22 for Zstd, 0 and 9 for Bzip2, and 0 and 9 for Deflate. (lower numbers mean faster compression)
+- `<algorithm>` is the compression algorithm to use (e.g., `Zstd`, `Bzip2`, `Deflate`). This should follow the `--compression-algorithm` or `-c` flag. Defaults to `Zstd`.
+- `<level>` is the compression level to use. This should follow the `--compression-level` or `-l` flag. Depending on the algorithm,
+  it can be a number between -7 and 22 for Zstd, 0 and 9 for Bzip2, and 0 and 9 for Deflate. (lower numbers mean faster compression). Defaults to `3` for Zstd.
 > Note: Higher compression levels can result in reduced file size but will take longer to compress.
 - `--convert_to_binary` is an optional flag that will convert the files to binary before compressing them.
 
 Example:
 ```bash
-cargo run -- compression ./my_folder ./archive.zip zstd 3
+cargo run -- compression ./my_folder ./archive.zip --compression-algorithm Zstd --compression-level 3
+```
+Or with short flags and default algorithm/level:
+```bash
+cargo run -- compression ./my_folder ./archive.zip 
+```
+Or with short flags:
+```bash
+cargo run -- compression ./my_folder ./archive.zip -c Zstd -l 3
 ```
 
 Example with binary conversion:
 ```bash
-cargo run -- compression ./my_folder ./archive.zip zstd 3 --convert_to_binary
+cargo run -- compression ./my_folder ./archive.zip -c Zstd -l 3 --convert_to_binary
 ```
 
-### To decompress a file, run the following command:
+### Decompressing Files
+
+To decompress a file, run the following command:
 
 ```bash
 cargo run -- decompression <zip_path> <output_folder> [--decompress_without_conversion]

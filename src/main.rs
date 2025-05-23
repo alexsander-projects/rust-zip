@@ -28,14 +28,14 @@ struct Args {
 #[derive(Parser, Debug)]
 enum Commands {
     Compression {
-        input_folder: String,
-        output_zip: String,
-        #[clap(long, short, help = "Compression algorithm to use. Available options: Zstd, Bzip2, Deflated")]
+        #[clap(long, short, help = "Compression algorithm to use. Available options: Zstd, Bzip2, Deflated", default_value_t = String::from("Zstd"))]
         compression_algorithm: String,
-        #[clap(long, short, help = "Compression level to use.\nZstd: -7 (fastest) to 22 (best compression), default 3.\nBzip2: 0 (fastest) to 9 (best compression), default 6.\nDeflated: 0 (no compression) to 9 (best compression), default 6.")]
+        #[clap(long, short = 'l', allow_hyphen_values = true, help = "Compression level to use.\nZstd: -7 (fastest) to 22 (best compression), default 3.\nBzip2: 0 (fastest) to 9 (best compression), default 6.\nDeflated: 0 (no compression) to 9 (best compression), default 6.", default_value_t = 3)]
         compression_level: i64,
         #[clap(long)]
         convert_to_binary: bool,
+        input_folder: String,
+        output_zip: String,
     },
     Decompression {
         zip_path: String,
