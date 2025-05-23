@@ -2,16 +2,19 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 use std::sync::Mutex;
-use std::path::PathBuf;
 use std::time::Instant;
 use rayon::prelude::*;
 use zip::{write::FileOptions, ZipWriter};
 
-use crate::image_processing::image_to_binary_file;
-use crate::text_to_binary::text_to_binary_file;
+
 use crate::utils::get_compression_method;
 
-
+/// Adds files directly to a ZIP archive without any prior conversion.
+///
+/// This function iterates over files in the specified `folder_path`,
+/// compresses them using the given `compression_algorithm` and `compression_level`,
+/// and adds them to the `zip` archive.
+///
 pub fn add_files_directly_to_zip(
     zip: &Mutex<ZipWriter<File>>,
     folder_path: &Path,
@@ -61,3 +64,4 @@ pub fn add_files_directly_to_zip(
     println!("Time elapsed: {:?}", duration);
     Ok(())
 }
+

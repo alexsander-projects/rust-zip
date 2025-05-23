@@ -7,6 +7,19 @@ use tokio::task;
 use futures::future;
 use zip::ZipArchive;
 
+/// Decompresses files from a ZIP archive directly to the output folder without any conversion.
+///
+/// This function reads a ZIP archive and extracts each file to the specified `output_folder`.
+/// It processes files asynchronously for potentially improved performance.
+///
+/// # Arguments
+///
+/// * `zip_path` - The path to the ZIP file to be decompressed.
+/// * `output_folder` - The directory where the decompressed files will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the operation.
 pub async fn decompress_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
     let start = Instant::now();
     println!("Starting decompression process...");
@@ -40,8 +53,6 @@ pub async fn decompress_files(zip_path: &Path, output_folder: &Path) -> io::Resu
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
 
-        let output_folder = output_folder.to_path_buf();
-
         tasks.push(task::spawn(async move {
             async_fs::write(&outpath, &buffer).await.unwrap();
             println!("Extracted file: {:?}", outpath.file_name().unwrap());
@@ -54,3 +65,4 @@ pub async fn decompress_files(zip_path: &Path, output_folder: &Path) -> io::Resu
     println!("Decompression process completed.");
     Ok(())
 }
+

@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 use std::error::Error;
 
-use crate::image_processing::{convert_binary_to_image, determine_image_format};
 use crate::text_to_binary::convert_binary_to_text;
 
 #[derive(Debug)]
@@ -24,6 +23,20 @@ pub enum FileType {
     Other,
 }
 
+/// Decompresses files from a ZIP archive and converts them to their original file types.
+///
+/// This function reads a ZIP archive, extracts each file, and then attempts to convert
+/// known binary formats (e.g., `.bin` files derived from images or text) back to their
+/// original types. It handles potential errors during file operations and conversions.
+///
+/// # Arguments
+///
+/// * `zip_path` - The path to the ZIP file to be decompressed.
+/// * `output_folder` - The directory where the decompressed and converted files will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the overall operation.
 pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Path) -> io::Result<()> {
     println!("Starting decompression and conversion process...");
     let overall_start = Instant::now();
@@ -101,6 +114,18 @@ pub async fn decompress_and_convert_to_files(zip_path: &Path, output_folder: &Pa
     Ok(())
 }
 
+/// Deletes any remaining `.bin` files from a specified output folder, typically after a conversion process.
+///
+/// This function is useful for cleaning up intermediate binary files that were created during
+/// a decompression and conversion workflow.
+///
+/// # Arguments
+///
+/// * `output_folder` - The path to the folder from which `.bin` files (within a `binary_files` subdirectory) should be deleted.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the deletion process.
 async fn delete_remaining_bin_files(output_folder:&Path) -> io::Result<()> {
     let binary_files_folder = output_folder.join("binary_files");
     if binary_files_folder.exists(){
@@ -116,6 +141,20 @@ async fn delete_remaining_bin_files(output_folder:&Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Converts a binary file (expected to be a JSON file originally) back to text and then deletes the original binary file.
+///
+/// This function attempts to convert a `.json.bin` file back to a `.json` file.
+/// It includes retry logic for deleting the original binary file, as file system operations
+/// can sometimes be temporarily blocked.
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the binary file (e.g., `example.json.bin`).
+/// * `output_folder` - The directory where the converted text file will be saved.
+///
+/// # Returns
+///
+/// A `Result<(), Box<dyn Error>>` indicating success or an error that occurred during conversion or cleanup.
 async fn convert_and_cleanup_json_file(file_path: &Path, output_folder: &PathBuf) -> Result<(), Box<dyn Error>> {
     let conversion_result = convert_binary_to_text(file_path, output_folder).await;
     if let Err(e) = conversion_result {
@@ -148,6 +187,18 @@ async fn convert_and_cleanup_json_file(file_path: &Path, output_folder: &PathBuf
     Err(Box::new(io::Error::new(io::ErrorKind::Other, "Failed to remove file after multiple attempts")))
 }
 
+/// Determines the `FileType` of a file based on its path and extension.
+///
+/// This function inspects the file extension. If the extension is `.bin`,
+/// it further inspects the file stem to infer the original file type (e.g., `image.png.bin` implies `Image`).
+///
+/// # Arguments
+///
+/// * `path` - The path to the file.
+///
+/// # Returns
+///
+/// A `FileType` enum variant representing the determined type of the file.
 fn determine_file_type(path: &Path) -> FileType {
     let extension = path.extension().and_then(OsStr::to_str);
     let mut file_type = FileType::Other;

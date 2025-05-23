@@ -7,6 +7,20 @@ use memmap::MmapOptions;
 
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 
+/// Converts an image file to a binary file format.
+///
+/// This function reads an image file, memory-maps its contents, and writes the raw bytes
+/// to a new file with a `.bin` extension in the specified `output_folder`.
+/// It also prints a message indicating the conversion, including a unique count for each processed file.
+///
+/// # Arguments
+///
+/// * `image_path` - The path to the input image file.
+/// * `output_folder` - The directory where the binary file will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<PathBuf>` containing the path to the created binary file, or an error.
 pub fn image_to_binary_file(image_path: &Path, output_folder: &Path) -> io::Result<PathBuf> {
     let file = File::open(image_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
@@ -22,6 +36,18 @@ pub fn image_to_binary_file(image_path: &Path, output_folder: &Path) -> io::Resu
     Ok(binary_file_path)
 }
 
+/// Determines the `ImageFormat` of a binary file based on its original extension (before being converted to `.bin`).
+///
+/// This function inspects the file stem of the binary path (e.g., `image.png.bin` -> `image.png`)
+/// to infer the original image format.
+///
+/// # Arguments
+///
+/// * `binary_path` - The path to the binary file (e.g., `image.png.bin`).
+///
+/// # Returns
+///
+/// An `io::Result<ImageFormat>` representing the determined image format, or an error if unsupported/unknown.
 pub(crate) fn determine_image_format(binary_path: &Path) -> io::Result<ImageFormat> {
     let mut extension = binary_path.extension().and_then(std::ffi::OsStr::to_str);
 
@@ -48,6 +74,20 @@ pub(crate) fn determine_image_format(binary_path: &Path) -> io::Result<ImageForm
     }
 }
 
+/// Converts a binary file back to an image file.
+///
+/// This function reads a binary file (assumed to be a previously converted image),
+/// loads it into memory, determines its original format, and saves it as an image
+/// in the `decompression_folder` with the appropriate extension.
+///
+/// # Arguments
+///
+/// * `binary_path` - The path to the binary file.
+/// * `decompression_folder` - The directory where the converted image file will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the conversion.
 pub async fn convert_binary_to_image(binary_path: &Path, decompression_folder: &Path) -> io::Result<()> {
     let file = File::open(binary_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
@@ -79,3 +119,4 @@ pub async fn convert_binary_to_image(binary_path: &Path, decompression_folder: &
 
     Ok(())
 }
+

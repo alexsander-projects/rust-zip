@@ -45,6 +45,9 @@ enum Commands {
     },
 }
 
+/// The main entry point of the application.
+///
+/// Parses command-line arguments and executes the appropriate command (compression or decompression).
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let args = Args::parse();

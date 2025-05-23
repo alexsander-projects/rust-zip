@@ -19,6 +19,23 @@ pub enum FileType {
     Other,
 }
 
+/// Adds files to a ZIP archive, optionally converting them to a target format before compression.
+///
+/// This function iterates over files in the `folder_path`, converts them if necessary based on `file_type`,
+/// compresses them using the specified `compression_algorithm` and `compression_level`,
+/// and adds them to the `zip` archive.
+///
+/// # Arguments
+///
+/// * `zip` - A thread-safe `Mutex` wrapping a `ZipWriter` for the output archive.
+/// * `folder_path` - The path to the folder containing files to be compressed.
+/// * `compression_algorithm` - The name of the compression algorithm to use.
+/// * `compression_level` - The level of compression to apply.
+/// * `file_type` - The type of files to process, influencing potential conversion steps.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the operation.
 pub fn add_files_to_zip(
     zip: &Mutex<ZipWriter<File>>,
     folder_path: &Path,
@@ -81,7 +98,15 @@ pub fn add_files_to_zip(
     Ok(())
 }
 
-
+/// Determines the `FileType` of a file based on its extension.
+///
+/// # Arguments
+///
+/// * `extension` - A string slice representing the file extension.
+///
+/// # Returns
+///
+/// A `FileType` enum variant corresponding to the extension.
 pub fn get_file_type(extension: &str) -> FileType {
     match extension {
         "png" | "jpg" | "gif" | "jpeg" => FileType::Image,
@@ -92,6 +117,16 @@ pub fn get_file_type(extension: &str) -> FileType {
     }
 }
 
+/// Checks if a file at a given path matches a specified `FileType`.
+///
+/// # Arguments
+///
+/// * `path` - The path to the file.
+/// * `file_type` - The `FileType` to check against.
+///
+/// # Returns
+///
+/// `true` if the file matches the `file_type`, `false` otherwise.
 pub fn file_type_matches(path: &Path, file_type: &FileType) -> bool {
     match file_type {
         FileType::Image => path.extension().map_or(false, |ext| ext == "png" || ext == "jpg"),
@@ -102,6 +137,20 @@ pub fn file_type_matches(path: &Path, file_type: &FileType) -> bool {
     }
 }
 
+/// Converts a file to a target format based on its `FileType`.
+///
+/// For images and text files, this function may convert them to a binary representation.
+/// Other file types are typically copied as is.
+///
+/// # Arguments
+///
+/// * `path` - The path to the input file.
+/// * `output_folder` - The directory where the converted file will be saved.
+/// * `_file_type` - The `FileType` of the input file (currently used to determine the target format indirectly via `get_file_type`).
+///
+/// # Returns
+///
+/// An `io::Result<PathBuf>` containing the path to the converted file, or an error.
 pub fn convert_to_target_format(path: &Path, output_folder: &Path, _file_type: &FileType) -> io::Result<PathBuf> {
     let extension = path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
     let target_file_type = get_file_type(extension);

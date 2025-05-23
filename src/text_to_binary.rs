@@ -3,10 +3,23 @@ use std::io;
 use std::path::{Path, PathBuf};
 use memmap::MmapOptions;
 use std::sync::atomic::{AtomicUsize, Ordering};
-// Implement the function text_to_binary_file that reads a text file and writes its contents to a binary file.
 
 static FILE_COUNT: AtomicUsize = AtomicUsize::new(1);
 
+/// Converts a text file to a binary file format.
+///
+/// This function reads a text file, memory-maps its contents, and writes the raw bytes
+/// to a new file with a `.bin` extension in the specified `output_folder`.
+/// It also prints a message indicating the conversion, including a unique count for each processed file.
+///
+/// # Arguments
+///
+/// * `text_path` - The path to the input text file.
+/// * `output_folder` - The directory where the binary file will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<PathBuf>` containing the path to the created binary file, or an error.
 pub fn text_to_binary_file(text_path: &Path, output_folder: &Path) -> io::Result<PathBuf> {
     let file = File::open(text_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
@@ -22,6 +35,19 @@ pub fn text_to_binary_file(text_path: &Path, output_folder: &Path) -> io::Result
     Ok(binary_file_path)
 }
 
+/// Determines the original format (e.g., "json", "txt") of a binary file.
+///
+/// This function inspects the file stem of the binary path (e.g., `document.txt.bin` -> `document.txt`)
+/// to infer the original text format.
+///
+/// # Arguments
+///
+/// * `binary_path` - The path to the binary file (e.g., `data.json.bin`).
+///
+/// # Returns
+///
+/// An `io::Result<String>` representing the determined text format (e.g., "json", "txt"),
+/// or an error if unsupported/unknown.
 pub async fn determine_text_format(binary_path: &Path) -> io::Result<String> {
     let mut extension = binary_path.extension().and_then(std::ffi::OsStr::to_str);
 
@@ -43,7 +69,20 @@ pub async fn determine_text_format(binary_path: &Path) -> io::Result<String> {
     }
 }
 
-// Implement the function binary_to_text_file that reads a binary file and writes its contents to a text file.
+/// Converts a binary file back to a text file.
+///
+/// This function reads a binary file (assumed to be a previously converted text file),
+/// decodes its content as UTF-8 (lossy), determines its original format (e.g., ".txt", ".json"),
+/// and saves it as a text file in the `decompression_folder` with the appropriate extension.
+///
+/// # Arguments
+///
+/// * `binary_path` - The path to the binary file.
+/// * `decompression_folder` - The directory where the converted text file will be saved.
+///
+/// # Returns
+///
+/// An `io::Result<()>` indicating success or failure of the conversion.
 pub async fn convert_binary_to_text(binary_path: &Path, decompression_folder: &Path) -> io::Result<()> {
     let file = File::open(binary_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
@@ -76,3 +115,4 @@ pub async fn convert_binary_to_text(binary_path: &Path, decompression_folder: &P
 
     Ok(())
 }
+
