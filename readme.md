@@ -67,6 +67,16 @@ Where:
 > Note: Higher compression levels can result in reduced file size but will take longer to compress.
 - `--convert_to_binary` is an optional flag that will convert the files to binary before compressing them.
 
+Example:
+```bash
+cargo run -- compression ./my_folder ./archive.zip zstd 3
+```
+
+Example with binary conversion:
+```bash
+cargo run -- compression ./my_folder ./archive.zip zstd 3 --convert_to_binary
+```
+
 ### To decompress a file, run the following command:
 
 ```bash
@@ -79,6 +89,16 @@ Where:
 - `--decompress_without_conversion` is an optional flag that will decompress
   the files without converting them back to their original format.
 
+Example:
+```bash
+cargo run -- decompression ./archive.zip ./output_directory
+```
+
+Example without conversion:
+```bash
+cargo run -- decompression ./archive.zip ./output_directory --decompress_without_conversion
+```
+
 ## Performance
 
 - The compression and decompression speed where roughly 10 times faster than 7zip for the Zstd algorithm,
@@ -89,3 +109,4 @@ Where:
 ## Conversion to binary performance
 
 - Converting to binary format has almost no impact on the compression speed, when converting text files.
+

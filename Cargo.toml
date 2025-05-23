@@ -13,3 +13,5 @@ memmap = "0.7.0"
 tokio = { version = "1.45.0", features = ["full"] }
 futures = "0.3.30"
 serde_json = "1.0.120"
+clap = { version = "4.5.4", features = ["derive"] }
+
